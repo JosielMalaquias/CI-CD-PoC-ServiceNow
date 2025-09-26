@@ -28,6 +28,6 @@ jobs:
             --user "${{ secrets.QAS_SN_USERNAME }}:${{ secrets.QAS_SN_PASSWORD }}" \
             --header "Content-Type: application/json" \
             --data-raw '{
-              "repo_config_sys_id": "${{ secrets.QAS_SN_APP_REPO_SYSID }}",
+              "app_sys_id": "${{ secrets.QAS_SN_APP_REPO_SYSID }}",
               "branch_name": "${{ github.event.inputs.branch_to_deploy }}"
             }'
