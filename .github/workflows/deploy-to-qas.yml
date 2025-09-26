@@ -24,7 +24,7 @@ jobs:
         run: |
           echo "Starting deployment to QAS for branch: ${{ github.event.inputs.branch_to_deploy }}"
           curl --request POST \
-            --url "https://${{ secrets.QAS_SN_INSTANCE }}/api/sn_cicd/app_repo/apply_changes" \
+            --url "https://${{ secrets.QAS_SN_INSTANCE }}/api/sn_cicd/sc/apply_changes" \
             --user "${{ secrets.QAS_SN_USERNAME }}:${{ secrets.QAS_SN_PASSWORD }}" \
             --header "Content-Type: application/json" \
             --data-raw '{
