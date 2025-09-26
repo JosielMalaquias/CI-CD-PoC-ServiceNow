@@ -4,7 +4,6 @@ name: Deploy to QAS Instance (On-Demand)
 # Gatilho: workflow_dispatch permite acionar este pipeline manualmente ou via API.
 on:
   workflow_dispatch:
-    # (Opcional, mas recomendado) Define parâmetros de entrada que a API pode passar.
     inputs:
       branch_to_deploy:
         description: 'The branch to deploy to QAS (e.g., main)'
@@ -17,17 +16,21 @@ jobs:
     name: Trigger ServiceNow QAS Deployment
     runs-on: ubuntu-latest
     steps:
+      # Etapa 1: Faz o checkout do código (boa prática)
       - name: Checkout Repository
         uses: actions/checkout@v3
 
+      # Etapa 2: Chama a API do ServiceNow para aplicar as mudanças (VERSÃO AJUSTADA)
       - name: Trigger "Apply Remote Changes" in QAS
         run: |
           echo "Starting deployment to QAS for branch: ${{ github.event.inputs.branch_to_deploy }}"
+          
+          # Constroi a URL com os parâmetros corretos
+          API_URL="https://${{ secrets.QAS_SN_INSTANCE }}/api/sn_cicd/sc/apply_changes"
+          PARAMS="?app_sys_id=${{ secrets.QAS_SN_APP_SYSID }}&app_scope=${{ secrets.QAS_SN_APP_SCOPE }}&branch_name=${{ github.event.inputs.branch_to_deploy }}"
+          
+          # Executa o comando curl com a nova URL e sem corpo de requisição
           curl --request POST \
-            --url "https://${{ secrets.QAS_SN_INSTANCE }}/api/sn_cicd/sc/apply_changes" \
+            --url "${API_URL}${PARAMS}" \
             --user "${{ secrets.QAS_SN_USERNAME }}:${{ secrets.QAS_SN_PASSWORD }}" \
-            --header "Content-Type: application/json" \
-            --data-raw '{
-              "app_sys_id": "${{ secrets.QAS_SN_APP_REPO_SYSID }}",
-              "branch_name": "${{ github.event.inputs.branch_to_deploy }}"
-            }'
+            --header "Accept:application/json"
