@@ -7,7 +7,7 @@
         <endpoint/>
         <html><![CDATA[<j:jelly trim="false" xmlns:j="jelly:core" xmlns:g="glide" xmlns:j2="null" xmlns:g2="null">
 
-    <!-- 1. VERIFICAR O ESTADO DA PLANTAÇÃO -->
+    <!-- 1. VERIFICAR O ESTADO DA PLANTAÇÃO 32-->
     <g:evaluate var="jvar_is_planted" jelly="true">
         gs.getProperty('poc.plantation.is_planted', 'false');
     </g:evaluate>
@@ -172,13 +172,13 @@
         <sys_created_by>CS287461</sys_created_by>
         <sys_created_on>2025-09-26 14:36:50</sys_created_on>
         <sys_id>f6e42fdc87583e5430ceec240cbb35fb</sys_id>
-        <sys_mod_count>5</sys_mod_count>
+        <sys_mod_count>6</sys_mod_count>
         <sys_name>cicd_poc_dashboard</sys_name>
         <sys_package display_value="CI/CD PoC ServiceNow" source="9574abd887583e5430ceec240cbb35de">9574abd887583e5430ceec240cbb35de</sys_package>
         <sys_policy/>
         <sys_scope display_value="CI/CD PoC ServiceNow">9574abd887583e5430ceec240cbb35de</sys_scope>
         <sys_update_name>sys_ui_page_f6e42fdc87583e5430ceec240cbb35fb</sys_update_name>
         <sys_updated_by>CS287461</sys_updated_by>
-        <sys_updated_on>2025-09-26 14:51:57</sys_updated_on>
+        <sys_updated_on>2025-09-26 16:59:06</sys_updated_on>
     </sys_ui_page>
 </record_update>
