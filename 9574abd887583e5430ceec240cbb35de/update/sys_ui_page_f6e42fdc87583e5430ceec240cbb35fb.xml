@@ -1,0 +1,184 @@
+<?xml version="1.0" encoding="UTF-8"?><record_update table="sys_ui_page">
+    <sys_ui_page action="INSERT_OR_UPDATE">
+        <category>general</category>
+        <client_script/>
+        <description/>
+        <direct>false</direct>
+        <endpoint/>
+        <html><![CDATA[<j:jelly trim="false" xmlns:j="jelly:core" xmlns:g="glide" xmlns:j2="null" xmlns:g2="null">
+
+    <!-- 1. VERIFICAR O ESTADO DA PLANTAÇÃO -->
+    <g:evaluate var="jvar_is_planted" jelly="true">
+        gs.getProperty('poc.plantation.is_planted', 'false');
+    </g:evaluate>
+    <g:evaluate var="jvar_instance_name" jelly="true">
+        gs.getProperty('instance_name');
+    </g:evaluate>
+
+    <!-- ESTILOS PARA A PLANTAÇÃO DENSA E VIVA -->
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&amp;display=swap');
+        
+        body, html {
+            margin: 0;
+            padding: 0;
+            font-family: 'Poppins', sans-serif;
+            background-color: #f0f4f8;
+            overflow: hidden;
+        }
+
+        .plantation-scene {
+            position: relative;
+            width: 100%;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: flex-end;
+        }
+        
+        .sky {
+            position: absolute;
+            top: 0; left: 0;
+            width: 100%; height: 80%;
+            background: linear-gradient(to bottom, #87ceeb 0%, #d3eaf2 100%);
+        }
+
+        .sun {
+            position: absolute;
+            top: 5vh; left: 10vw;
+            width: 100px; height: 100px;
+            background-color: #ffd700;
+            border-radius: 50%;
+            box-shadow: 0 0 50px rgba(255, 223, 0, 0.7);
+        }
+
+        .ground {
+            position: relative;
+            width: 100%; height: 20%;
+            background: linear-gradient(to bottom, #8b5a2b, #6b4423);
+            z-index: 3;
+        }
+
+        /* ESTILOS DA CANA-DE-AÇÚCAR */
+        .sugarcane {
+            position: absolute;
+            bottom: 18%;
+            display: flex;
+            justify-content: center;
+            transform-origin: bottom;
+            animation: grow 1.5s cubic-bezier(0.25, 1, 0.5, 1) forwards;
+        }
+
+        .stalk {
+            height: 100%;
+            border-radius: 4px 4px 0 0;
+            background: repeating-linear-gradient(to top, #689f38, #689f38 30px, #7cb342 30px, #7cb342 32px);
+        }
+        
+        .leaves::before, .leaves::after {
+            content: '';
+            position: absolute;
+            top: 10%; width: 8px; height: 120px;
+            background: #4caf50;
+            border-radius: 50% 0;
+            transform-origin: bottom left;
+            animation: sway 5s infinite ease-in-out;
+        }
+        .leaves::before { transform: rotate(-30deg) translateX(-10px); }
+        .leaves::after { top: 20%; transform: rotate(30deg) translateX(10px); animation-name: sway-right; animation-delay: -2.5s; }
+
+        /* MÚLTIPLAS CAMADAS PARA DENSIDADE */
+        .far-background  { z-index: 1; filter: blur(4px) brightness(0.7); }
+        .mid-background  { z-index: 5; filter: blur(2px) brightness(0.85); }
+        .foreground      { z-index: 15; }
+        
+        @keyframes grow { from { transform: scaleY(0); } to { transform: scaleY(1); } }
+        @keyframes sway { 0%, 100% { transform: rotate(-30deg) translateX(-10px); } 50% { transform: rotate(-40deg) translateX(-10px); } }
+        @keyframes sway-right { 0%, 100% { transform: rotate(30deg) translateX(10px); } 50% { transform: rotate(40deg) translateX(10px); } }
+
+        /* PAINEL DE CONTROLE - SEMPRE NA FRENTE */
+        .control-panel {
+            position: absolute;
+            top: 30px; right: 30px;
+            background: rgba(255, 255, 255, 0.85);
+            backdrop-filter: blur(10px);
+            border-radius: 12px;
+            padding: 20px 25px;
+            box-shadow: 0 4px 20px rgba(0,0,0,0.1);
+            border: 1px solid rgba(255,255,255,0.6);
+            z-index: 100;
+            max-width: 350px;
+        }
+        .status-indicator { display: inline-block; padding: 8px 15px; border-radius: 20px; font-weight: 600; font-size: 1.1em; color: white; margin-bottom: 10px; }
+        .status-active { background-color: #27ae60; }
+        .status-inactive { background-color: #c0392b; }
+        .control-panel p { color: #34495e; margin: 0; line-height: 1.6; }
+        .control-panel code { background: #ecf0f1; padding: 3px 6px; border-radius: 4px; border: 1px solid #bdc3c7; }
+    </style>
+
+    <!-- CORPO DA CENA -->
+    <div class="plantation-scene">
+        <div class="sky"><div class="sun"></div></div>
+        <div class="ground"></div>
+        
+        <!-- PAINEL DE CONTROLE -->
+        <div class="control-panel">
+            <j:if test="${jvar_is_planted == 'true'}">
+                <div class="status-indicator status-active"> Safra Ativa</div>
+                <p>O pipeline de deploy ativou a plantação! A propriedade <code>poc.plantation.is_planted</code> está como <strong>true</strong>.</p>
+            </j:if>
+            <j:if test="${jvar_is_planted == 'false'}">
+                <div class="status-indicator status-inactive"> barren Aguardando Plantio</div>
+                <p>O campo está pronto para o plantio. Um deploy com a propriedade <code>poc.plantation.is_planted</code> como <strong>true</strong> iniciará o cultivo.</p>
+            </j:if>
+            <p style="border-top: 1px solid #dfe6e9; margin-top: 15px; padding-top: 15px;"><strong>Instância:</strong> <code>${jvar_instance_name}</code></p>
+        </div>
+
+        <!-- A PLANTAÇÃO DENSA (SÓ RENDERIZA SE 'true') -->
+        <j:if test="${jvar_is_planted == 'true'}">
+            <!-- CAMADA 3: FUNDO DISTANTE (mais fina, escura e desfocada) -->
+            <div class="sugarcane far-background" style="left: 5%; height: 45vh; animation-delay: 0.8s;"><div class="stalk" style="width: 8px;"></div></div>
+            <div class="sugarcane far-background" style="left: 12%; height: 50vh; animation-delay: 1.2s;"><div class="stalk" style="width: 10px;"></div></div>
+            <div class="sugarcane far-background" style="left: 28%; height: 48vh; animation-delay: 1s;"><div class="stalk" style="width: 9px;"></div></div>
+            <div class="sugarcane far-background" style="left: 45%; height: 42vh; animation-delay: 1.3s;"><div class="stalk" style="width: 10px;"></div></div>
+            <div class="sugarcane far-background" style="left: 60%; height: 52vh; animation-delay: 0.9s;"><div class="stalk" style="width: 8px;"></div></div>
+            <div class="sugarcane far-background" style="left: 75%; height: 47vh; animation-delay: 1.1s;"><div class="stalk" style="width: 9px;"></div></div>
+            <div class="sugarcane far-background" style="left: 92%; height: 50vh; animation-delay: 0.8s;"><div class="stalk" style="width: 10px;"></div></div>
+            
+            <!-- CAMADA 2: PLANO MÉDIO (transição) -->
+            <div class="sugarcane mid-background" style="left: 2%; height: 60vh; animation-delay: 0.5s;"><div class="stalk" style="width: 12px;"><div class="leaves"></div></div></div>
+            <div class="sugarcane mid-background" style="left: 18%; height: 55vh; animation-delay: 0.7s;"><div class="stalk" style="width: 14px;"><div class="leaves"></div></div></div>
+            <div class="sugarcane mid-background" style="left: 25%; height: 62vh; animation-delay: 0.4s;"><div class="stalk" style="width: 13px;"><div class="leaves"></div></div></div>
+            <div class="sugarcane mid-background" style="left: 38%; height: 58vh; animation-delay: 0.8s;"><div class="stalk" style="width: 12px;"><div class="leaves"></div></div></div>
+            <div class="sugarcane mid-background" style="left: 52%; height: 65vh; animation-delay: 0.6s;"><div class="stalk" style="width: 14px;"><div class="leaves"></div></div></div>
+            <div class="sugarcane mid-background" style="left: 68%; height: 60vh; animation-delay: 0.3s;"><div class="stalk" style="width: 13px;"><div class="leaves"></div></div></div>
+            <div class="sugarcane mid-background" style="left: 80%; height: 56vh; animation-delay: 0.7s;"><div class="stalk" style="width: 12px;"><div class="leaves"></div></div></div>
+            <div class="sugarcane mid-background" style="left: 95%; height: 63vh; animation-delay: 0.5s;"><div class="stalk" style="width: 14px;"><div class="leaves"></div></div></div>
+
+            <!-- CAMADA 1: PRIMEIRO PLANO (mais alta, grossa e nítida) -->
+            <div class="sugarcane foreground" style="left: 8%; height: 75vh; animation-delay: 0.2s;"><div class="stalk" style="width: 20px;"><div class="leaves"></div></div></div>
+            <div class="sugarcane foreground" style="left: 20%; height: 80vh; animation-delay: 0.4s;"><div class="stalk" style="width: 22px; filter: brightness(1.1);"><div class="leaves"></div></div></div>
+            <div class="sugarcane foreground" style="left: 33%; height: 72vh; animation-delay: 0.1s;"><div class="stalk" style="width: 18px;"><div class="leaves"></div></div></div>
+            <div class="sugarcane foreground" style="left: 48%; height: 85vh; animation-delay: 0s;"><div class="stalk" style="width: 24px;"><div class="leaves"></div></div></div>
+            <div class="sugarcane foreground" style="left: 62%; height: 78vh; animation-delay: 0.3s;"><div class="stalk" style="width: 20px;"><div class="leaves"></div></div></div>
+            <div class="sugarcane foreground" style="left: 72%; height: 82vh; animation-delay: 0.2s;"><div class="stalk" style="width: 22px; filter: brightness(1.05);"><div class="leaves"></div></div></div>
+            <div class="sugarcane foreground" style="left: 88%; height: 76vh; animation-delay: 0.4s;"><div class="stalk" style="width: 18px;"><div class="leaves"></div></div></div>
+        </j:if>
+    </div>
+</j:jelly>]]></html>
+        <name>cicd_poc_dashboard</name>
+        <processing_script/>
+        <sys_class_name>sys_ui_page</sys_class_name>
+        <sys_created_by>CS287461</sys_created_by>
+        <sys_created_on>2025-09-26 14:36:50</sys_created_on>
+        <sys_id>f6e42fdc87583e5430ceec240cbb35fb</sys_id>
+        <sys_mod_count>5</sys_mod_count>
+        <sys_name>cicd_poc_dashboard</sys_name>
+        <sys_package display_value="CI/CD PoC ServiceNow" source="9574abd887583e5430ceec240cbb35de">9574abd887583e5430ceec240cbb35de</sys_package>
+        <sys_policy/>
+        <sys_scope display_value="CI/CD PoC ServiceNow">9574abd887583e5430ceec240cbb35de</sys_scope>
+        <sys_update_name>sys_ui_page_f6e42fdc87583e5430ceec240cbb35fb</sys_update_name>
+        <sys_updated_by>CS287461</sys_updated_by>
+        <sys_updated_on>2025-09-26 14:51:57</sys_updated_on>
+    </sys_ui_page>
+</record_update>
