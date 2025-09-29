@@ -1,0 +1,53 @@
+# Nome do workflow que aparecerá na aba "Actions" do GitHub
+name: Create Pull Request on Feature Branch Push
+
+# Gatilho: Este workflow roda sempre que houver um push
+# em qualquer branch que comece com 'feature/' ou 'fix/'
+on:
+  push:
+    branches:
+      - 'feature/**'
+      - 'fix/**'
+
+# Define as permissões que o job terá.
+permissions:
+  contents: read
+  pull-requests: write
+
+# Define os jobs que serão executados.
+jobs:
+  create_pull_request:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+      - name: Get Branch Name
+        id: get_branch
+        run: echo "BRANCH_NAME=${GITHUB_REF##*/}" >> $GITHUB_OUTPUT
+
+      # VERIFICA SE JÁ EXISTE UMA PR
+      - name: Check for Existing Pull Request
+        id: check_pr
+        run: |
+          if gh pr list --head "${{ steps.get_branch.outputs.BRANCH_NAME }}" | grep -q "."; then
+            echo "PR_EXISTS=true" >> $GITHUB_OUTPUT
+            echo "Pull Request for this branch already exists. Skipping."
+          else
+            echo "PR_EXISTS=false" >> $GITHUB_OUTPUT
+            echo "No existing Pull Request found. Proceeding to create one."
+          fi
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
+
+      # CRIA A PULL REQUEST
+      - name: Create Pull Request
+        if: steps.check_pr.outputs.PR_EXISTS == 'false'
+        run: |
+          gh pr create \
+            --base main \
+            --head "${{ steps.get_branch.outputs.BRANCH_NAME }}" \
+            --title "WIP: ${{ steps.get_branch.outputs.BRANCH_NAME }}" \
+            --body "Auto-generated PR from ServiceNow commit. Please review the changes for the feature: **${{ steps.get_branch.outputs.BRANCH_NAME }}**"
+        env:
+          GH_TOKEN: ${{ secrets.GH_PAT }}
