@@ -1,63 +1,74 @@
 # Nome do workflow que aparecerá na aba "Actions" do GitHub
 name: Create Pull Request on Feature Branch Push
 
-# Gatilho (Trigger): Este workflow roda sempre que houver um push
-# em qualquer branch que comece com 'feature/' ou 'fix/'
+# Gatilho
 on:
   push:
     branches:
       - 'feature/**'
       - 'fix/**'
+      - 'teste_quality' # Adicionando sua branch de teste
 
-# Define as permissões que o job terá. Precisamos de permissão para ler o conteúdo
-# e para escrever (criar) Pull Requests. Isso é crucial para a segurança.
+# Permissões do job
 permissions:
   contents: read
   pull-requests: write
 
-# Define os jobs que serão executados. Teremos apenas um job.
 jobs:
   create_pull_request:
-    # O tipo de máquina virtual que o job rodará. 'ubuntu-latest' é o padrão e recomendado.
     runs-on: ubuntu-latest
-    
-    # Etapas (steps) que o job executará em sequência
     steps:
-      # 1. Faz o checkout do código do seu repositório para a máquina virtual
+      # Etapa 1: Faz o checkout do código do seu repositório
+      # fetch-depth: 0 garante que tenhamos o histórico completo para comparar as branches
       - name: Checkout Repository
         uses: actions/checkout@v3
+        with:
+          fetch-depth: 0
 
-      # 2. Extrai o nome da branch que acionou o workflow
-      # Ex: Se o push foi para 'refs/heads/feature/new-animation', a variável BRANCH_NAME será 'feature/new-animation'
+      # Etapa 2: Extrai o nome da branch que acionou o workflow
       - name: Get Branch Name
         id: get_branch
         run: echo "BRANCH_NAME=${GITHUB_REF##*/}" >> $GITHUB_OUTPUT
 
-      # 3. VERIFICA SE JÁ EXISTE UMA PR PARA ESTA BRANCH
-      # Isso evita criar PRs duplicadas se houver múltiplos pushes para a mesma branch.
-      # Usamos o GitHub CLI (gh) que já vem instalado nas máquinas virtuais.
+      # === NOVA ETAPA DE VERIFICAÇÃO DE COMMITS ===
+      # Esta etapa verifica se há alguma diferença entre a branch atual e a 'main'
+      - name: Check for new commits
+        id: check_commits
+        run: |
+          # Conta o número de commits que existem nesta branch mas não na 'main'
+          COMMIT_COUNT=$(git rev-list --count HEAD ^main)
+          echo "Found $COMMIT_COUNT new commits."
+          echo "commit_count=$COMMIT_COUNT" >> $GITHUB_OUTPUT
+
+      # Etapa 4: VERIFICA SE JÁ EXISTE UMA PR
       - name: Check for Existing Pull Request
         id: check_pr
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if gh pr list --head "${{ steps.get_branch.outputs.BRANCH_NAME }}" | grep -q "."; then
             echo "PR_EXISTS=true" >> $GITHUB_OUTPUT
             echo "Pull Request for this branch already exists. Skipping."
           else
             echo "PR_EXISTS=false" >> $GITHUB_OUTPUT
-            echo "No existing Pull Request found. Proceeding to create one."
+            echo "No existing Pull Request found. Proceeding."
           fi
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Autentica o GitHub CLI
 
-      # 4. CRIA A PULL REQUEST (se não existir uma)
-      # Esta etapa só roda se a etapa anterior (check_pr) definir PR_EXISTS como 'false'
+      # Etapa 5: CRIA A PULL REQUEST (com lógica aprimorada)
+      # Só executa se a PR não existir E se houver pelo menos 1 commit novo
       - name: Create Pull Request
-        if: steps.check_pr.outputs.PR_EXISTS == 'false'
+        if: steps.check_commits.outputs.commit_count > 0 && steps.check_pr.outputs.PR_EXISTS == 'false'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
+          echo "Creating Pull Request..."
           gh pr create \
             --base main \
             --head "${{ steps.get_branch.outputs.BRANCH_NAME }}" \
             --title "WIP: ${{ steps.get_branch.outputs.BRANCH_NAME }}" \
             --body "Auto-generated PR from ServiceNow commit. Please review the changes for the feature: **${{ steps.get_branch.outputs.BRANCH_NAME }}**"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }} # Usa o token especial do GitHub para autenticar a criação da PR
+
+      # Etapa 6: Pula a criação se não houver commits
+      - name: Skip PR Creation (No Commits)
+        if: steps.check_commits.outputs.commit_count == 0
+        run: echo "Skipping PR creation because there are no new commits on this branch."
