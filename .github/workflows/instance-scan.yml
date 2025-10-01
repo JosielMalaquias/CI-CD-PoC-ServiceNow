@@ -1,43 +1,40 @@
 # Nome do workflow de verificação de qualidade do código
 name: ServiceNow Instance Scan
 
-# Gatilho: Roda sempre que uma Pull Request for aberta para a branch 'main'
-# ou quando novos commits forem adicionados a uma PR existente.
+# Gatilho
 on:
   pull_request:
     branches:
       - main
     types: [opened, synchronize]
 
-# Permissões necessárias para que o job possa escrever um comentário na PR
+# Permissões
 permissions:
   pull-requests: write
 
-# Define os jobs a serem executados
 jobs:
   run_instance_scan:
     name: Run ServiceNow Instance Scan
     runs-on: ubuntu-latest
     steps:
-      # Etapa 1: Faz o checkout do código
+      # Etapa 1: Checkout do código
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      # Etapa 2: INICIA O SCAN NA INSTÂNCIA DE DEV
-      # Chama a API para iniciar o scan e captura o ID da execução (execution_id)
+      # Etapa 2: INICIA O SCAN (VERSÃO CORRIGIDA CONFORME DOCUMENTAÇÃO)
       - name: Start Scan
         id: start_scan
         run: |
           echo "Starting Instance Scan..."
           API_URL="https://${{ secrets.DEV_SN_INSTANCE }}/api/sn_cicd/scan/run"
           
-          # Corpo da requisição para iniciar um scan de uma Suite específica em uma aplicação
+          # Corpo da requisição CORRIGIDO para usar o sys_id da aplicação
           JSON_PAYLOAD=$(cat <<EOF
           {
             "scan_type": "suite",
             "target_type": "app",
             "target_record": {
-              "scope": "${{ secrets.DEV_SN_APP_SCOPE }}"
+              "sys_id": "${{ secrets.DEV_SN_APP_SYSID }}"
             },
             "scan_details": {
               "suite_id": "3f95b1058742de1086e341170cbb3571"
@@ -46,27 +43,35 @@ jobs:
           EOF
           )
 
-          # Faz a chamada da API e usa 'jq' para extrair o ID da execução do resultado
-          # A saída é salva como uma variável de output do passo
-          RESPONSE=$(curl --request POST \
+          RESPONSE=$(curl --request POST --fail \
             --url "$API_URL" \
             --user "${{ secrets.DEV_SN_USERNAME }}:${{ secrets.DEV_SN_PASSWORD }}" \
             --header "Content-Type: application/json" \
             --data "$JSON_PAYLOAD")
           
-          echo "API Response: $RESPONSE"
+          echo "Full API Response from ServiceNow:"
+          echo "$RESPONSE"
+          
           EXECUTION_ID=$(echo "$RESPONSE" | jq -r '.result.execution_id')
+          
+          if [ -z "$EXECUTION_ID" ] || [ "$EXECUTION_ID" = "null" ]; then
+            echo "::error::Failed to get a valid execution_id from ServiceNow API."
+            exit 1
+          fi
+          
+          echo "Successfully started scan with execution_id: $EXECUTION_ID"
           echo "execution_id=$EXECUTION_ID" >> $GITHUB_OUTPUT
 
-      # Etapa 3: AGUARDA O RESULTADO DO SCAN (POLLING)
-      # Em um loop, verifica o status do scan a cada 15 segundos até que seja concluído
+      # As etapas 3, 4 e 5 (Wait, Analyze, Post Results) permanecem as mesmas,
+      # pois a lógica de obter os resultados já estava correta.
+      
+      # Etapa 3: AGUARDA O RESULTADO DO SCAN
       - name: Wait for Scan Results
         id: wait_for_scan
         run: |
           echo "Waiting for scan results for execution ID: ${{ steps.start_scan.outputs.execution_id }}"
-          API_URL="https://${{ secrets.QAS_SN_APP_SYSID }}/api/sn_cicd/scan/results/${{ steps.start_scan.outputs.execution_id }}"
+          API_URL="https://${{ secrets.DEV_SN_INSTANCE }}/api/sn_cicd/scan/results/${{ steps.start_scan.outputs.execution_id }}"
           
-          # Loop para verificar o status a cada 15 segundos, com um timeout de 5 minutos
           for i in {1..20}; do
             RESPONSE=$(curl --request GET \
               --url "$API_URL" \
@@ -93,25 +98,19 @@ jobs:
           echo "Scan timed out after 5 minutes."
           exit 1
           
-      # Etapa 4: ANALISA OS RESULTADOS E FALHA O PIPELINE SE HOUVER ACHADOS
-      # Verifica se o número de "findings" (problemas encontrados) é maior que zero
+      # Etapa 4: ANALISA OS RESULTADOS
       - name: Analyze Results and Fail if Necessary
         id: analyze
         run: |
-          echo "Analyzing scan results..."
           RESULTS_JSON='${{ steps.wait_for_scan.outputs.scan_results }}'
-          
-          # Extrai informações chave do resultado do scan
           FINDING_COUNT=$(echo "$RESULTS_JSON" | jq -r '.result.summary.finding_count')
           CRITICAL_COUNT=$(echo "$RESULTS_JSON" | jq -r '.result.summary.critical_finding_count')
           URL=$(echo "$RESULTS_JSON" | jq -r '.result.result_url')
 
-          # Salva as informações para usar na próxima etapa
           echo "finding_count=$FINDING_COUNT" >> $GITHUB_OUTPUT
           echo "critical_count=$CRITICAL_COUNT" >> $GITHUB_OUTPUT
           echo "result_url=$URL" >> $GITHUB_OUTPUT
 
-          # A LÓGICA DO "QUALITY GATE": Se houver qualquer achado, o pipeline falha
           if [ "$FINDING_COUNT" -gt 0 ]; then
             echo "::error::Scan failed with $FINDING_COUNT findings. Check the results for details."
             exit 1
@@ -120,20 +119,16 @@ jobs:
           fi
 
       # Etapa 5: POSTA UM COMENTÁRIO NA PULL REQUEST
-      # Usa o GitHub CLI para adicionar um resumo dos resultados diretamente na PR
       - name: Post Results to Pull Request
-        # Roda sempre, mesmo que a etapa anterior tenha falhado, para garantir que o feedback seja postado
         if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
         run: |
-          # Prepara o corpo do comentário com base no resultado da análise
           if [ "${{ steps.analyze.outputs.finding_count }}" -gt 0 ]; then
             COMMENT_BODY="❌ **Instance Scan Failed!**\n\n- **Total Findings:** ${{ steps.analyze.outputs.finding_count }}\n- **Critical Findings:** ${{ steps.analyze.outputs.critical_count }}\n\n[**Click here to view the full scan results in ServiceNow**](${{ steps.analyze.outputs.result_url }})\n\nPlease fix the issues before this PR can be merged."
           else
             COMMENT_BODY="✅ **Instance Scan Passed!**\n\n- No findings detected by the scan suite.\n\n[**Click here to view the scan record in ServiceNow**](${{ steps.analyze.outputs.result_url }})"
           fi
           
-          # Usa o GitHub CLI para postar o comentário
           gh pr comment "$PR_NUMBER" --body "$COMMENT_BODY"
