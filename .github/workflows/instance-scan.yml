@@ -21,15 +21,18 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      # Etapa 2: INICIA O SCAN (USANDO O ENDPOINT CORRETO E SIMPLIFICADO)
+      # Etapa 2: INICIA O SCAN (COM DEPURAÇÃO DA URL)
       - name: Start Scan
         id: start_scan
         run: |
-          echo "Starting Instance Scan using the suite_scan endpoint..."
+          echo "Starting Instance Scan..."
           SUITE_SYS_ID="3f95b1058742de1086e341170cbb3571"
-          API_URL="https://${{ secrets.DEV_SN_INSTANCE }}/api/sn_cicd/instance_scan/suite_scan/${SUITE_SYS_ID}/scoped_apps"
+          API_URL="https://s${{ secrets.DEV_SN_INSTANCE }}/api/sn_cicd/instance_scan/suite_scan/${SUITE_SYS_ID}/scoped_apps"
           
-          # A chamada agora é um POST simples, sem corpo de requisição
+          # === NOVA LINHA DE DEPURAÇÃO ===
+          # Imprime a URL completa que será usada pelo curl
+          echo "Calling API URL: ${API_URL}"
+          
           RESPONSE=$(curl --request POST --fail \
             --url "$API_URL" \
             --user "${{ secrets.DEV_SN_USERNAME }}:${{ secrets.DEV_SN_PASSWORD }}" \
@@ -38,8 +41,6 @@ jobs:
           echo "Full API Response from ServiceNow:"
           echo "$RESPONSE"
           
-          # A estrutura da resposta para este endpoint pode ser diferente.
-          # A documentação sugere que ela também contém um 'result.execution_id'.
           EXECUTION_ID=$(echo "$RESPONSE" | jq -r '.result.execution_id')
           
           if [ -z "$EXECUTION_ID" ] || [ "$EXECUTION_ID" = "null" ]; then
@@ -50,16 +51,17 @@ jobs:
           echo "Successfully started scan with execution_id: $EXECUTION_ID"
           echo "execution_id=$EXECUTION_ID" >> $GITHUB_OUTPUT
 
-      # As etapas 3, 4 e 5 (Wait for Results, Analyze, Post to PR) permanecem as mesmas,
-      # pois a API para consultar os resultados pelo execution_id é a mesma.
+      # As etapas 3, 4 e 5 (Wait for Results, Analyze, Post to PR) permanecem as mesmas.
       
       # Etapa 3: AGUARDA O RESULTADO DO SCAN
       - name: Wait for Scan Results
         id: wait_for_scan
         run: |
-          # ... (código inalterado) ...
           echo "Waiting for scan results for execution ID: ${{ steps.start_scan.outputs.execution_id }}"
-          API_URL="https://${{ secrets.DEV_SN_INSTANCE }}/api/sn_cicd/scan/results/${{ steps.start_scan.outputs.execution_id }}"
+          API_URL="https://s${{ secrets.DEV_SN_INSTANCE }}/api/sn_cicd/scan/results/${{ steps.start_scan.outputs.execution_id }}"
+          
+          # Adicionando depuração aqui também para consistência
+          echo "Polling results from URL: ${API_URL}"
           
           for i in {1..20}; do
             RESPONSE=$(curl --request GET \
@@ -84,7 +86,6 @@ jobs:
           
       # Etapa 4: ANALISA OS RESULTADOS
       - name: Analyze Results and Fail if Necessary
-        # ... (código inalterado) ...
         id: analyze
         run: |
           RESULTS_JSON='${{ steps.wait_for_scan.outputs.scan_results }}'
@@ -103,7 +104,6 @@ jobs:
 
       # Etapa 5: POSTA UM COMENTÁRIO NA PULL REQUEST
       - name: Post Results to Pull Request
-        # ... (código inalterado) ...
         if: always()
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -112,6 +112,6 @@ jobs:
           if [ "${{ steps.analyze.outputs.finding_count }}" -gt 0 ]; then
             COMMENT_BODY="❌ **Instance Scan Failed!**\n\n- **Total Findings:** ${{ steps.analyze.outputs.finding_count }}\n- **Critical Findings:** ${{ steps.analyze.outputs.critical_count }}\n\n[**Click here to view the full scan results in ServiceNow**](${{ steps.analyze.outputs.result_url }})\n\nPlease fix the issues before this PR can be merged."
           else
-            COMMENT_BODY="✅ **Instance Scan Passed!**\n\n- No findings  detected by the scan suite.\n\n[**Click here to view the scan record in ServiceNow**](${{ steps.analyze.outputs.result_url }})"
+            COMMENT_BODY="✅ **Instance Scan Passed!**\n\n- No findings detected by the scan suite.\n\n[**Click here to view the scan record in ServiceNow**](${{ steps.analyze.outputs.result_url }})"
           fi
           gh pr comment "$PR_NUMBER" --body "$COMMENT_BODY"
