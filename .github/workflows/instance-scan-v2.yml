@@ -21,7 +21,7 @@ jobs:
       - name: Checkout Repository
         uses: actions/checkout@v3
 
-      # Etapa 2: INICIA O SCAN (COM DEPURAÇÃO DA URL)
+# Etapa 2: INICIA O SCAN (COM O CORPO DE REQUISIÇÃO CORRETO)
       - name: Start Scan
         id: start_scan
         run: |
@@ -29,14 +29,25 @@ jobs:
           SUITE_SYS_ID="3f95b1058742de1086e341170cbb3571"
           API_URL="https://${{ secrets.DEV_SN_INSTANCE }}/api/sn_cicd/instance_scan/suite_scan/${SUITE_SYS_ID}/scoped_apps"
           
-          # === NOVA LINHA DE DEPURAÇÃO ===
-          # Imprime a URL completa que será usada pelo curl
           echo "Calling API URL: ${API_URL}"
-          
+
+          # Constrói o corpo JSON com o array de sys_ids de escopos de aplicação
+          JSON_PAYLOAD=$(cat <<EOF
+          {
+            "app_scope_sys_ids": [
+              "${{ secrets.DEV_SN_APP_SCOPE_SYSID }}"
+            ]
+          }
+          EOF
+          )
+
+          echo "Request Body: ${JSON_PAYLOAD}"
+
           RESPONSE=$(curl --request POST --fail \
             --url "$API_URL" \
             --user "${{ secrets.DEV_SN_USERNAME }}:${{ secrets.DEV_SN_PASSWORD }}" \
-            --header "Content-Type: application/json")
+            --header "Content-Type: application/json" \
+            --data "${JSON_PAYLOAD}")
           
           echo "Full API Response from ServiceNow:"
           echo "$RESPONSE"
