@@ -112,6 +112,6 @@ jobs:
           if [ "${{ steps.analyze.outputs.finding_count }}" -gt 0 ]; then
             COMMENT_BODY="❌ **Instance Scan Failed!**\n\n- **Total Findings:** ${{ steps.analyze.outputs.finding_count }}\n- **Critical Findings:** ${{ steps.analyze.outputs.critical_count }}\n\n[**Click here to view the full scan results in ServiceNow**](${{ steps.analyze.outputs.result_url }})\n\nPlease fix the issues before this PR can be merged."
           else
-            COMMENT_BODY="✅ **Instance Scan Passed!**\n\n- No findings detected by the scan suite.\n\n[**Click here to view the scan record in ServiceNow**](${{ steps.analyze.outputs.result_url }})"
+            COMMENT_BODY="✅ **Instance Scan Passed!**\n\n- No findings  detected by the scan suite.\n\n[**Click here to view the scan record in ServiceNow**](${{ steps.analyze.outputs.result_url }})"
           fi
           gh pr comment "$PR_NUMBER" --body "$COMMENT_BODY"
