@@ -27,7 +27,7 @@ jobs:
         run: |
           echo "Starting Instance Scan..."
           SUITE_SYS_ID="3f95b1058742de1086e341170cbb3571"
-          API_URL="https://s${{ secrets.DEV_SN_INSTANCE }}/api/sn_cicd/instance_scan/suite_scan/${SUITE_SYS_ID}/scoped_apps"
+          API_URL="https://${{ secrets.DEV_SN_INSTANCE }}/api/sn_cicd/instance_scan/suite_scan/${SUITE_SYS_ID}/scoped_apps"
           
           # === NOVA LINHA DE DEPURAÇÃO ===
           # Imprime a URL completa que será usada pelo curl
