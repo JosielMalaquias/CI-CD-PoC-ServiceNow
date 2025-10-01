@@ -8,6 +8,7 @@ on:
       - 'feature/**'
       - 'fix/**'
       - 'teste_quality'
+      - 'novo_teste'
 
 # Permissões do job
 permissions:
@@ -18,10 +19,11 @@ jobs:
   create_pull_request:
     runs-on: ubuntu-latest
     steps:
-      # Etapa 1: Faz o checkout do código
+      # Etapa 1: Faz o checkout do código do seu repositório
       - name: Checkout Repository
         uses: actions/checkout@v3
         with:
+          # É crucial buscar todo o histórico para comparar branches
           fetch-depth: 0
 
       # Etapa 2: Extrai o nome da branch
@@ -29,13 +31,24 @@ jobs:
         id: get_branch
         run: echo "BRANCH_NAME=${GITHUB_REF##*/}" >> $GITHUB_OUTPUT
 
-      # Etapa 3: Verifica se há commits novos
-      - name: Check for new commits
+      # ===================================================================
+      # === ETAPA DE VERIFICAÇÃO DE COMMITS (VERSÃO ROBUSTA) ===
+      # ===================================================================
+      - name: Check for new commits against remote main
         id: check_commits
         run: |
-          COMMIT_COUNT=$(git rev-list --count HEAD ^main)
-          echo "Found $COMMIT_COUNT new commits."
+          echo "--- Debugging Git State ---"
+          echo "Current Branch: ${{ steps.get_branch.outputs.BRANCH_NAME }}"
+          echo "Listing remote branches..."
+          git branch -r
+          
+          echo "Comparing HEAD against origin/main..."
+          # ESTE É O COMANDO CORRIGIDO E MAIS ROBUSTO
+          COMMIT_COUNT=$(git rev-list --count HEAD ^origin/main)
+          
+          echo "Found $COMMIT_COUNT new commits compared to origin/main."
           echo "commit_count=$COMMIT_COUNT" >> $GITHUB_OUTPUT
+          echo "--- End Debugging ---"
 
       # Etapa 4: Verifica se já existe uma PR
       - name: Check for Existing Pull Request
@@ -51,20 +64,20 @@ jobs:
             echo "No existing Pull Request found."
           fi
 
-      # Etapa 5: CRIA A PULL REQUEST (com a correção)
+      # Etapa 5: CRIA A PULL REQUEST (com a condição correta)
       - name: Create Pull Request
         if: steps.check_commits.outputs.commit_count > 0 && steps.check_pr.outputs.PR_EXISTS == 'false'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # A CORREÇÃO ESTÁ AQUI: Adicionamos 2>&1 no final do comando
+          echo "Attempting to create Pull Request as there are new commits and no existing PR."
           gh pr create \
             --base main \
             --head "${{ steps.get_branch.outputs.BRANCH_NAME }}" \
             --title "WIP: ${{ steps.get_branch.outputs.BRANCH_NAME }}" \
-            --body "Auto-generated PR from ServiceNow commit. Please review the changes for the feature: **${{ steps.get_branch.outputs.BRANCH_NAME }}**" 2>&1
+            --body "Auto-generated PR from ServiceNow commit. Please review the changes for the feature: **${{ steps.get_branch.outputs.BRANCH_NAME }}**"
 
-      # Etapa 6: Pula a criação se não houver commits
-      - name: Skip PR Creation (No Commits)
-        if: steps.check_commits.outputs.commit_count == 0
-        run: echo "Skipping PR creation because there are no new commits on this branch."
+      # Etapa 6: Pula a criação se a condição não for atendida
+      - name: Skip PR Creation
+        if: steps.check_commits.outputs.commit_count == 0 || steps.check_pr.outputs.PR_EXISTS == 'true'
+        run: echo "Skipping PR creation. Reason: No new commits OR a PR already exists."
