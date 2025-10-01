@@ -35,7 +35,7 @@ jobs:
           JSON_PAYLOAD=$(cat <<EOF
           {
             "app_scope_sys_ids": [
-              "${{ secrets.DEV_SN_APP_SCOPE_SYSID }}"
+              "${{ secrets.DEV_SN_APP_SYSID }}"
             ]
           }
           EOF
