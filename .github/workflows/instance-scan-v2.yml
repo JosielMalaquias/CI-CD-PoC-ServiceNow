@@ -1,0 +1,128 @@
+# Nome do workflow de verificação de qualidade do código
+name: ServiceNow Instance Scan
+
+# Gatilho
+on:
+  pull_request:
+    branches:
+      - main
+    types: [opened, synchronize]
+
+# Permissões
+permissions:
+  pull-requests: write
+
+jobs:
+  run_instance_scan:
+    name: Run ServiceNow Instance Scan
+    runs-on: ubuntu-latest
+    steps:
+      # Etapa 1: Checkout do código
+      - name: Checkout Repository
+        uses: actions/checkout@v3
+
+# Etapa 2: INICIA O SCAN (COM O CORPO DE REQUISIÇÃO CORRETO)
+      - name: Start Scan
+        id: start_scan
+        run: |
+          echo "Starting Instance Scan..."
+          SUITE_SYS_ID="3f95b1058742de1086e341170cbb3571"
+          API_URL="https://${{ secrets.DEV_SN_INSTANCE }}/api/sn_cicd/instance_scan/suite_scan/${SUITE_SYS_ID}/scoped_apps"
+          
+          echo "Calling API URL: ${API_URL}"
+
+          # Constrói o corpo JSON com o array de sys_ids de escopos de aplicação
+          JSON_PAYLOAD=$(cat <<EOF
+          {
+            "app_scope_sys_ids": [
+              "${{ secrets.DEV_SN_APP_SYSID }}"
+            ]
+          }
+          EOF
+          )
+
+          echo "Request Body: ${JSON_PAYLOAD}"
+
+          RESPONSE=$(curl --request POST --fail \
+            --url "$API_URL" \
+            --user "${{ secrets.DEV_SN_USERNAME }}:${{ secrets.DEV_SN_PASSWORD }}" \
+            --header "Content-Type: application/json" \
+            --data "${JSON_PAYLOAD}")
+          
+          echo "Full API Response from ServiceNow:"
+          echo "$RESPONSE"
+          
+          EXECUTION_ID=$(echo "$RESPONSE" | jq -r '.result.execution_id')
+          
+          if [ -z "$EXECUTION_ID" ] || [ "$EXECUTION_ID" = "null" ]; then
+            echo "::error::Failed to get a valid execution_id from ServiceNow API."
+            exit 1
+          fi
+          
+          echo "Successfully started scan with execution_id: $EXECUTION_ID"
+          echo "execution_id=$EXECUTION_ID" >> $GITHUB_OUTPUT
+
+      # As etapas 3, 4 e 5 (Wait for Results, Analyze, Post to PR) permanecem as mesmas.
+      
+      # Etapa 3: AGUARDA O RESULTADO DO SCAN
+      - name: Wait for Scan Results
+        id: wait_for_scan
+        run: |
+          echo "Waiting for scan results for execution ID: ${{ steps.start_scan.outputs.execution_id }}"
+          API_URL="https://s${{ secrets.DEV_SN_INSTANCE }}/api/sn_cicd/scan/results/${{ steps.start_scan.outputs.execution_id }}"
+          
+          # Adicionando depuração aqui também para consistência
+          echo "Polling results from URL: ${API_URL}"
+          
+          for i in {1..20}; do
+            RESPONSE=$(curl --request GET \
+              --url "$API_URL" \
+              --user "${{ secrets.DEV_SN_USERNAME }}:${{ secrets.DEV_SN_PASSWORD }}" \
+              --header "Accept: application/json")
+            STATUS=$(echo "$RESPONSE" | jq -r '.result.status')
+            echo "Current scan status: $STATUS"
+            if [ "$STATUS" = "Complete" ]; then
+              echo "Scan complete!"
+              echo "scan_results=$RESPONSE" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            if [ "$STATUS" = "Failed" ] || [ "$STATUS" = "Canceled" ]; then
+                echo "Scan failed or was canceled."
+                exit 1
+            fi
+            sleep 15
+          done
+          echo "Scan timed out after 5 minutes."
+          exit 1
+          
+      # Etapa 4: ANALISA OS RESULTADOS
+      - name: Analyze Results and Fail if Necessary
+        id: analyze
+        run: |
+          RESULTS_JSON='${{ steps.wait_for_scan.outputs.scan_results }}'
+          FINDING_COUNT=$(echo "$RESULTS_JSON" | jq -r '.result.summary.finding_count')
+          CRITICAL_COUNT=$(echo "$RESULTS_JSON" | jq -r '.result.summary.critical_finding_count')
+          URL=$(echo "$RESULTS_JSON" | jq -r '.result.result_url')
+          echo "finding_count=$FINDING_COUNT" >> $GITHUB_OUTPUT
+          echo "critical_count=$CRITICAL_COUNT" >> $GITHUB_OUTPUT
+          echo "result_url=$URL" >> $GITHUB_OUTPUT
+          if [ "$FINDING_COUNT" -gt 0 ]; then
+            echo "::error::Scan failed with $FINDING_COUNT findings. Check the results for details."
+            exit 1
+          else
+            echo "Scan passed with 0 findings."
+          fi
+
+      # Etapa 5: POSTA UM COMENTÁRIO NA PULL REQUEST
+      - name: Post Results to Pull Request
+        if: always()
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+        run: |
+          if [ "${{ steps.analyze.outputs.finding_count }}" -gt 0 ]; then
+            COMMENT_BODY="❌ **Instance Scan Failed!**\n\n- **Total Findings:** ${{ steps.analyze.outputs.finding_count }}\n- **Critical Findings:** ${{ steps.analyze.outputs.critical_count }}\n\n[**Click here to view the full scan results in ServiceNow**](${{ steps.analyze.outputs.result_url }})\n\nPlease fix the issues before this PR can be merged."
+          else
+            COMMENT_BODY="✅ **Instance Scan Passed!**\n\n- No findings detected by the scan suite.\n\n[**Click here to view the scan record in ServiceNow**](${{ steps.analyze.outputs.result_url }})"
+          fi
+          gh pr comment "$PR_NUMBER" --body "$COMMENT_BODY"
